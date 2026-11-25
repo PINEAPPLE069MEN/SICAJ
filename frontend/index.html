@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SICAJ - Sistema Integral de Control de Asistencias y Justificantes</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- LOGIN -->
+    <div id="login-overlay">
+        <div class="login-card">
+            <i class="fas fa-university" style="font-size: 3rem; color: var(--primary); margin-bottom: 10px;"></i>
+
+            <!-- Inicio de sesión -->
+            <div id="login-panel">
+                <h2>SICAJ Acceso</h2>
+                <div class="form-group"><label>Usuario / Matrícula / Clave</label><input type="text" id="user" autocomplete="username"></div>
+                <div class="form-group"><label>Contraseña</label><input type="password" id="pass" autocomplete="current-password"></div>
+                <button class="btn btn-primary" style="width: 100%;" onclick="validateLogin(this)">Entrar</button>
+                <p id="error-msg" style="color: var(--secondary); margin-top: 15px; display: none;"></p>
+                <a href="#" class="link-recuperar" onclick="abrirRecuperacion(event)">¿Olvidaste tu contraseña?</a>
+            </div>
+
+            <!-- Recuperación de contraseña, paso 1: pedir el código -->
+            <div id="recup-paso1" style="display:none; text-align:left;">
+                <h2 style="text-align:center;">Recuperar contraseña</h2>
+                <p class="recup-texto">Escribe tu usuario y el correo electrónico registrado en la escuela. Te enviaremos un código de 6 dígitos. <small>(Alumnos: el código llega al correo de su tutor.)</small></p>
+                <div class="form-group"><label>Usuario / Matrícula / Clave</label><input type="text" id="recup-user" autocomplete="username"></div>
+                <div class="form-group"><label>Correo electrónico registrado</label><input type="email" id="recup-correo" autocomplete="email"></div>
+                <button class="btn btn-primary" style="width: 100%;" onclick="solicitarCodigoRecuperacion(this)">Enviar código</button>
+                <p id="recup-msg1" class="recup-msg" style="display:none;"></p>
+                <a href="#" class="link-recuperar" onclick="cerrarRecuperacion(event)">← Volver al inicio de sesión</a>
+                <a href="#" class="link-recuperar" onclick="irPasoCodigo(event)">Ya tengo un código</a>
+            </div>
+
+            <!-- Recuperación de contraseña, paso 2: código y contraseña nueva -->
+            <div id="recup-paso2" style="display:none; text-align:left;">
+                <h2 style="text-align:center;">Nueva contraseña</h2>
+                <p class="recup-texto">Escribe el código que recibiste (vale 15 minutos) y elige tu contraseña nueva.</p>
+                <div class="form-group"><label>Usuario / Matrícula / Clave</label><input type="text" id="recup-user2" autocomplete="username"></div>
+                <div class="form-group"><label>Código de 6 dígitos</label><input type="text" id="recup-codigo" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div>
+                <div class="form-group"><label>Contraseña nueva (mínimo 8 caracteres)</label><input type="password" id="recup-pass1" autocomplete="new-password"></div>
+                <div class="form-group"><label>Confirmar contraseña nueva</label><input type="password" id="recup-pass2" autocomplete="new-password"></div>
+                <button class="btn btn-primary" style="width: 100%;" onclick="confirmarRecuperacion(this)">Cambiar contraseña</button>
+                <p id="recup-msg2" class="recup-msg" style="display:none;"></p>
+                <a href="#" class="link-recuperar" onclick="cerrarRecuperacion(event)">← Volver al inicio de sesión</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICACIONES -->
+    <div id="toast-container"></div>
+
+    <!-- MODAL DE EDICIÓN GENÉRICO -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal-box modal-edicion" style="max-width: 480px; text-align: left;">
+            <h3 id="edit-modal-title">Editar Registro</h3>
+            <div id="edit-modal-body" class="grid modal-cuerpo"></div>
+            <div class="modal-pie">
+                <button class="btn btn-primary" onclick="guardarEdicion(this)">Guardar Cambios</button>
+                <button class="btn btn-secondary" onclick="cerrarModalEdicion()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL RESULTADO -->
+    <div class="modal-overlay" id="result-modal">
+        <div class="modal-box">
+            <i class="fas fa-check-circle" style="font-size: 2.5rem; color: var(--success); margin-bottom: 10px;"></i>
+            <h3 id="modal-title">Registro Exitoso</h3>
+            <div id="modal-body"></div>
+            <button class="btn btn-primary modal-btn" onclick="closeModal()">Aceptar</button>
+        </div>
+    </div>
+
+    <!-- MODAL VISTA PREVIA PDF -->
+    <div class="modal-overlay modal-pdf" id="pdf-modal">
+        <div class="modal-box">
+            <h3 id="pdf-modal-title">Vista Previa del Reporte</h3>
+            <iframe id="pdf-modal-frame"></iframe>
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <a class="btn btn-success" id="pdf-modal-download" download="reporte.pdf">Descargar PDF</a>
+                <button class="btn btn-secondary" onclick="cerrarModalPdf()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px;">
+            <h2 style="font-size: 1.2rem;">SICAJ - TEC. 9</h2>
+            <small id="user-role-display"></small>
+        </div>
+        <nav>
+            <h4>General</h4>
+            <a class="nav-link" data-roles="Docente" data-permiso="panel.ver" onclick="showTab('panel-control', event)"><i class="fas fa-chart-line"></i> Panel de Control</a>
+            <a class="nav-link" data-permiso="ciclos.ver" onclick="showTab('ciclos', event)"><i class="fas fa-calendar-alt"></i> Ciclos y Grupos</a>
+            <a class="nav-link" data-roles="Docente" data-permiso="horarios.ver" onclick="showTab('horarios', event)"><i class="fas fa-clock"></i> Horarios de Clase</a>
+            <a class="nav-link" data-permiso="suspensiones.ver|suspensiones.gestionar" onclick="showTab('suspensiones', event)"><i class="fas fa-calendar-times"></i> Suspensión de Clases</a>
+            <h4>Registros</h4>
+            <a class="nav-link" data-permiso="personal.ver|personal.gestionar" onclick="showTab('personal', event)"><i class="fas fa-user-tie"></i> Personal Institucional</a>
+            <a class="nav-link" data-roles="Docente" data-permiso="alumnos.ver" onclick="showTab('alumnos', event)"><i class="fas fa-user-graduate"></i> Inscripción de Alumnos</a>
+            <a class="nav-link" data-permiso="permisos.gestionar" onclick="showTab('permisos', event)"><i class="fas fa-user-shield"></i> Permisos y Accesos</a>
+            <h4>Operaciones</h4>
+            <a class="nav-link" data-roles="Docente,Administrativo" data-permiso="asistencia.ver|asistencia.monitor" onclick="showTab('asistencias', event)"><i class="fas fa-qrcode"></i> Asistencia (QR)</a>
+            <a class="nav-link" data-permiso="justificantes.ver" onclick="showTab('justificantes', event)"><i class="fas fa-file-invoice"></i> Gestión de Justificantes</a>
+            <a class="nav-link" data-permiso="reportes.ver" onclick="showTab('reportes', event)"><i class="fas fa-file-pdf"></i> Reportes</a>
+            <h4>Mi Cuenta</h4>
+            <a class="nav-link" data-roles="Administrador,Docente,Administrativo,Director,Subdirector,Alumno,Padre_Tutor" onclick="showTab('perfil', event)"><i class="fas fa-user-cog"></i> Perfil de Usuario</a>
+            <a class="nav-link" onclick="cerrarSesion()" style="color: #ff7675;"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+        </nav>
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="main-content" id="main-content">
+        <header style="margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+                <button class="menu-toggle" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
+                <h1 id="section-title">Panel de Control</h1>
+            </div>
+            <div id="live-clock" style="font-weight: bold; color: var(--primary);"></div>
+        </header>
+
+        <!-- PANEL DE CONTROL -->
+        <div id="panel-control" class="section active">
+            <div id="banner-suspension" class="aviso-suspension"></div>
+            <!-- PANEL DE LA ESCUELA (Administrador y quien tenga panel.ver) -->
+            <div id="panel-escuela" style="display:none;">
+                <div class="grid">
+                    <div class="card stat-card"><div class="icono"><i class="fas fa-user-graduate"></i></div><h3>Total Alumnos</h3><p class="valor" id="stat-alumnos">—</p></div>
+                    <div class="card stat-card"><div class="icono"><i class="fas fa-chalkboard-teacher"></i></div><h3>Docentes Activos</h3><p class="valor" id="stat-docentes">—</p></div>
+                    <div class="card stat-card"><div class="icono"><i class="fas fa-users"></i></div><h3>Grupos</h3><p class="valor" id="stat-grupos">—</p></div>
+                </div>
+                <div class="grid">
+                    <div class="card stat-card"><div class="icono rojo"><i class="fas fa-user-slash"></i></div><h3>Inasistencias de hoy</h3><p class="valor" id="stat-inas-hoy">—</p></div>
+                    <div class="card stat-card"><div class="icono"><i class="fas fa-user-clock"></i></div><h3>Retardos de hoy</h3><p class="valor" id="stat-ret-hoy">—</p></div>
+                    <div class="card stat-card"><div class="icono rojo"><i class="fas fa-calendar-week"></i></div><h3>Inasistencias de la semana</h3><p class="valor" id="stat-inas-semana">—</p></div>
+                </div>
+                <div class="card">
+                    <h3>Incidencias por Docente (semana actual)</h3>
+                    <p class="required-note" id="chart-semana-rango"></p>
+                    <p class="required-note">Se cuenta como inasistencia cuando un docente tenía clase programada y ya pasó su tolerancia (o terminó su horario) sin escanear el código QR.</p>
+                    <div style="position: relative; height: 340px;"><canvas id="mainChart"></canvas></div>
+                    <p id="chart-vacio" style="display:none; color:#888; text-align:center; margin-top:10px;">Sin inasistencias ni retardos en lo que va de la semana.</p>
+                </div>
+                <div class="card">
+                    <h3>Permisos (Justificantes) de Alumnos — últimos 30 días</h3>
+                    <div style="position: relative; height: 340px;"><canvas id="chartJustificantes"></canvas></div>
+                    <p id="chart-justificantes-vacio" style="display:none; color:#888; text-align:center; margin-top:10px;">Sin justificantes registrados en los últimos 30 días.</p>
+                </div>
+            </div>
+
+            <!-- PANEL DEL DOCENTE: solo SUS estadísticas -->
+            <div id="panel-docente" style="display:none;">
+                <div class="perm-hero">
+                    <div class="perm-hero-icono"><i class="fas fa-chart-pie"></i></div>
+                    <div>
+                        <h3>Mis asistencias</h3>
+                        <p id="doc-rango">—</p>
+                    </div>
+                </div>
+                <div class="grid">
+                    <div class="card stat-card"><div class="icono"><i class="fas fa-circle-check"></i></div><h3>A tiempo</h3><p class="valor" id="doc-asistencias">—</p></div>
+                    <div class="card stat-card"><div class="icono"><i class="fas fa-user-clock"></i></div><h3>Retardos</h3><p class="valor" id="doc-retardos">—</p></div>
+                    <div class="card stat-card"><div class="icono rojo"><i class="fas fa-user-slash"></i></div><h3>Inasistencias</h3><p class="valor" id="doc-inasistencias">—</p></div>
+                </div>
+                <div class="card">
+                    <h3>Esta semana y el ciclo escolar</h3>
+                    <p class="required-note" id="doc-ciclo-texto"></p>
+                    <div style="position: relative; height: 300px;"><canvas id="chartDocente"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3>Mi semana</h3>
+                    <div style="overflow-x:auto;">
+                        <table border="1" cellpadding="10" width="100%">
+                            <tr><th>Día</th><th>Mi jornada</th><th>Entrada</th><th>Estatus</th></tr>
+                            <tbody id="doc-semana-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3><i class="fas fa-file-circle-check"></i> Justificantes aprobados en mis grupos</h3>
+                    <p class="required-note">Estos alumnos tienen justificante aprobado en un día en que les das clase. No les pongas falta.</p>
+                    <div style="overflow-x:auto;">
+                        <table border="1" cellpadding="10" width="100%">
+                            <tr><th>Fecha</th><th>Alumno</th><th>Grupo</th><th>Materia y hora</th></tr>
+                            <tbody id="doc-justif-tbody"><tr><td colspan="4">Cargando...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- CICLOS Y GRUPOS -->
+        <div id="ciclos" class="section">
+            <div class="catalogo-tabs">
+                <button class="tab-btn active" onclick="cambiarSubTab('cat-ciclos', this)">Ciclos Escolares</button>
+                <button class="tab-btn" onclick="cambiarSubTab('cat-materias', this)">Materias</button>
+                <button class="tab-btn" onclick="cambiarSubTab('cat-grupos', this)">Grupos</button>
+            </div>
+
+            <!-- CICLOS ESCOLARES (Ahora activo por defecto) -->
+            <div class="tab-panel active" id="cat-ciclos">
+                <div class="card">
+                    <h3>Registrar Ciclo Escolar</h3>
+                    <div class="grid">
+                        <div class="form-group"><label>Nombre del Ciclo</label><input type="text" id="ciclo-nombre" placeholder="Ej. 2025-2026" maxlength="20"></div>
+                        <div class="form-group"><label>Fecha Inicio</label><input type="date" id="ciclo-inicio"></div>
+                        <div class="form-group"><label>Fecha Fin</label><input type="date" id="ciclo-fin"></div>
+                    </div>
+                    <button class="btn btn-primary" onclick="guardarCiclo(this)">Guardar Ciclo</button>
+                </div>
+                <div class="card">
+                    <h3>Ciclos Registrados</h3>
+                    <table border="1" cellpadding="10" width="100%">
+                        <tr><th>Nombre</th><th>Fecha Inicio</th><th>Fecha Fin</th><th>Acciones</th></tr>
+                        <tbody id="ciclos-tbody"><tr><td colspan="4">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+           <!-- MATERIAS -->
+            <div class="tab-panel" id="cat-materias">
+                <div class="card">
+                    <h3>Registrar Materia</h3>
+                    <div class="grid">
+                        <div class="form-group"><label>Nombre Materia</label><input type="text" id="materia-nombre" maxlength="40"></div>
+                        <div class="form-group"><label>Grado</label>
+                            <select id="materia-grado">
+                                <option value="">-- Seleccione --</option>
+                                <option value="1">1°</option>
+                                <option value="2">2°</option>
+                                <option value="3">3°</option>
+                            </select>
+                        </div>
+                        <!-- Inayon daytoy a casilla para iti taller -->
+                        <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 25px;">
+                            <input type="checkbox" id="materia-es-taller" style="width: 18px; height: 18px; cursor: pointer;">
+                            <label for="materia-es-taller" style="margin: 0; cursor: pointer;">¿Es Taller?</label>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="guardarMateria(this)">Registrar Materia</button>
+                </div>
+                <div class="card">
+
+                    <h3>Materias Registradas</h3>
+                    <table border="1" cellpadding="10" width="100%">
+                        <tr><th>Nombre</th><th>Grado</th><th>Acciones</th></tr>
+                        <tbody id="materias-tbody"><tr><td colspan="3">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- GRUPOS -->
+            <div class="tab-panel" id="cat-grupos">
+                <div class="card">
+                    <h3>Crear Grupo</h3>
+                    <div class="grid">
+                        <div class="form-group"><label>Grado</label>
+                            <select id="grupo-grado">
+                                <option value="">-- Seleccione --</option>
+                                <option value="1">1°</option>
+                                <option value="2">2°</option>
+                                <option value="3">3°</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Letra</label><input type="text" id="grupo-letra" maxlength="1" placeholder="A"></div>
+                        <div class="form-group"><label>Turno</label>
+                            <select id="grupo-turno"><option value="">-- Seleccione --</option><option>Matutino</option><option>Vespertino</option></select>
+                        </div>
+                        <div class="form-group"><label>Ciclo Escolar</label>
+                            <select id="grupo-ciclo"><option value="">-- Seleccione --</option></select>
+                        </div>
+                    </div>
+                    <button class="btn btn-success" onclick="crearGrupo(this)">Crear Grupo</button>
+                </div>
+                <div class="card">
+                    <h3>Grupos Registrados</h3>
+                    <table border="1" cellpadding="10" width="100%">
+                        <tr><th>Grado</th><th>Letra</th><th>Turno</th><th>Ciclo</th><th>Acciones</th></tr>
+                        <tbody id="grupos-tbody"><tr><td colspan="5">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- HORARIOS DE CLASE -->
+<div id="horarios" class="section">
+    <!-- Barra interactiva rápida -->
+    <div class="card" data-permiso="horarios.gestionar">
+        <h3 style="margin-bottom: 5px;">Asignación Rápida de Horario</h3>
+        <p class="required-note" style="margin-bottom: 15px;">
+            1. Elige el Docente, Materia y Grupo. <br>
+            2. Haz <strong>clic directo sobre cualquier espacio del calendario</strong> para asignar o remover la clase al instante.
+        </p>
+
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Docente Activo</label>
+                <select id="h-docente" onchange="alCambiarDocenteActivo()">
+                    <option value="">-- Seleccionar Docente --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Materia</label>
+                <select id="h-materia">
+                    <option value="">-- Seleccionar Materia --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Grupo</label>
+                <select id="h-grupo">
+                    <option value="">-- Seleccionar Grupo --</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendario Semanal Interactivo -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <h3 id="titulo-calendario-docente">Horario Semanal</h3>
+            <span id="horario-ayuda" style="font-size: 0.85rem; color: #64748b;">
+                <i class="fas fa-info-circle"></i> Clic en celda vacía = Asignar | Clic en clase = Eliminar
+            </span>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table class="horario-semanal-table">
+                <thead>
+                    <tr>
+                        <th style="width: 110px;">Hora</th>
+                        <th>Lunes</th>
+                        <th>Martes</th>
+                        <th>Miércoles</th>
+                        <th>Jueves</th>
+                        <th>Viernes</th>
+                    </tr>
+                </thead>
+                <tbody id="horario-semanal-tbody">
+                    <!-- Filas interactivas de 7:00 a 19:00 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+        <!-- INSCRIPCIÓN DE ALUMNOS -->
+        <div id="alumnos" class="section">
+            <div class="card" data-permiso="alumnos.gestionar">
+                <h3>Inscripción de Alumno y Tutor</h3>
+
+                <h4>1. Datos del Alumno</h4>
+                <div class="grid-3">
+                    <div class="form-group"><label>Nombre(s)</label><input type="text" id="al-nombres" maxlength="30"></div>
+                    <div class="form-group"><label>Apellido Paterno</label><input type="text" id="al-ap-pat" maxlength="30"></div>
+                    <div class="form-group"><label>Apellido Materno</label><input type="text" id="al-ap-mat" maxlength="30"></div>
+                    <div class="form-group"><label>CURP</label><input type="text" id="al-curp" maxlength="18" style="text-transform:uppercase;"></div>
+                    <div class="form-group"><label>Sexo</label>
+                        <select id="al-sexo"><option value="">-- Seleccione --</option><option value="M">Masculino</option><option value="F">Femenino</option></select>
+                    </div>
+                    <div class="form-group"><label>Fecha de Nacimiento</label><input type="date" id="al-nacimiento"></div>
+                </div>
+                <div class="grid-3">
+                    <div class="form-group"><label>Calle</label><input type="text" id="al-calle"></div>
+                    <div class="form-group"><label>Número Exterior</label><input type="text" id="al-num"></div>
+                    <div class="form-group"><label>Colonia</label><input type="text" id="al-colonia"></div>
+                    <div class="form-group"><label>Municipio</label><input type="text" id="al-municipio"></div>
+                    <div class="form-group"><label>Estado</label><input type="text" id="al-estado"></div>
+                    <div class="form-group"><label>Código Postal</label><input type="text" id="al-cp" maxlength="5"></div>
+                </div>
+
+                <h4>2. Datos del Padre o Tutor Legal</h4>
+                <p class="required-note">Si la CURP ya existe en el sistema, el registro se vincula al tutor existente <span>en vez de crear uno nuevo</span>.</p>
+                <div class="grid-3">
+                    <div class="form-group"><label>Nombre(s)</label><input type="text" id="tu-nombres" maxlength="30"></div>
+                    <div class="form-group"><label>Apellido Paterno</label><input type="text" id="tu-ap-pat" maxlength="30"></div>
+                    <div class="form-group"><label>Apellido Materno</label><input type="text" id="tu-ap-mat" maxlength="30"></div>
+                    <div class="form-group"><label>CURP del Tutor</label><input type="text" id="tu-curp" maxlength="18" style="text-transform:uppercase;"></div>
+                    <div class="form-group"><label>Parentesco</label>
+                        <select id="tu-parentesco"><option value="">-- Seleccione --</option><option>Padre</option><option>Madre</option><option>Tutor Legal</option></select>
+                    </div>
+                    <div class="form-group"><label>Teléfono</label><input type="tel" id="tu-tel" maxlength="10"></div>
+                    <div class="form-group"><label>Correo Electrónico</label><input type="email" id="tu-email" maxlength="50"></div>
+                </div>
+                <h4>Dirección del Tutor</h4>
+                <div class="grid-3">
+                    <div class="form-group"><label>Calle</label><input type="text" id="tu-calle"></div>
+                    <div class="form-group"><label>Número Exterior</label><input type="text" id="tu-num"></div>
+                    <div class="form-group"><label>Colonia</label><input type="text" id="tu-colonia"></div>
+                    <div class="form-group"><label>Municipio</label><input type="text" id="tu-municipio"></div>
+                    <div class="form-group"><label>Estado</label><input type="text" id="tu-estado"></div>
+                    <div class="form-group"><label>Código Postal</label><input type="text" id="tu-cp" maxlength="5"></div>
+                </div>
+
+                <h4>3. Asignación Académica</h4>
+                <div style="max-width: 280px;">
+                    <div class="form-group"><label>Seleccionar Grupo</label>
+                        <select id="al-grupo"><option value="">-- Seleccione un grupo --</option></select>
+                    </div>
+                    <div class="form-group"><label>Taller / Tecnología Asignado</label>
+                        <select id="al-taller">
+                            <option value="">-- Sin taller asignado / Opcional --</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="guardarAlumno(this)">Inscribir Alumno</button>
+            </div> <!-- CIERRE DE LA PRIMERA CARD -->
+
+            <div class="card"> <!-- SEGUNDA CARD -->
+                <h3>Alumnos Inscritos</h3>
+                <div class="form-group" style="max-width: 320px;">
+                    <input type="text" id="alumnos-buscar" placeholder="Buscar por nombre o número de control..." oninput="filtrarTablaAlumnos()">
+                </div>
+                <table border="1" cellpadding="10" width="100%">
+                    <thead>
+                        <tr>
+                            <th>No. Control</th>
+                            <th>Nombre</th>
+                            <th>Grupo</th>
+                            <th>Taller</th>
+                            <th id="alumnos-th-acciones">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alumnos-tbody">
+                        <tr><td colspan="5">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div> <!-- CIERRE DE LA SEGUNDA CARD -->
+        </div> <!-- CIERRE DE LA SECCIÓN ALUMNOS -->
+
+        <!-- PERSONAL INSTITUCIONAL -->
+        <div id="personal" class="section active">
+            <div class="card" data-permiso="personal.gestionar">
+                <h3>Registro de Personal</h3>
+                <h4>Datos Generales</h4>
+                <div class="grid-3">
+                    <div class="form-group"><label>Nombre(s)</label><input type="text" id="pe-nombres" maxlength="30"></div>
+                    <div class="form-group"><label>Apellido Paterno</label><input type="text" id="pe-ap-pat" maxlength="30"></div>
+                    <div class="form-group"><label>Apellido Materno</label><input type="text" id="pe-ap-mat" maxlength="30"></div>
+                    <div class="form-group"><label>CURP</label><input type="text" id="pe-curp" maxlength="18" style="text-transform:uppercase;"></div>
+                    <div class="form-group"><label>Correo Electrónico</label><input type="email" id="pe-email" maxlength="50"></div>
+                    <div class="form-group"><label>Teléfono</label><input type="tel" id="pe-tel" maxlength="10"></div>
+                    <div class="form-group"><label>Rol</label>
+                        <select id="pe-rol">
+                            <option value="">-- Seleccione --</option>
+                            <option value="Docente">Docente</option>
+                            <option value="Director">Director</option>
+                            <option value="Subdirector">Subdirector</option>
+                            <option value="Administrativo">Administrativo</option>
+                        </select>
+                    </div>
+                </div>
+                <h4>Dirección</h4>
+                <div class="grid-3">
+                    <div class="form-group"><label>Calle</label><input type="text" id="pe-calle"></div>
+                    <div class="form-group"><label>Número Exterior</label><input type="text" id="pe-num"></div>
+                    <div class="form-group"><label>Colonia</label><input type="text" id="pe-colonia"></div>
+                    <div class="form-group"><label>Municipio</label><input type="text" id="pe-municipio"></div>
+                    <div class="form-group"><label>Estado</label><input type="text" id="pe-estado"></div>
+                    <div class="form-group"><label>Código Postal</label><input type="text" id="pe-cp" maxlength="5"></div>
+                </div>
+                <button class="btn btn-primary" style="margin-top: 15px;" onclick="guardarPersonal(this)">Generar Clave de Empleado</button>
+            </div>
+
+            <div class="card">
+                <h3>Personal Registrado</h3>
+                <div class="form-group" style="max-width: 320px;">
+                    <input type="text" id="personal-buscar" placeholder="Buscar por nombre o clave..." oninput="filtrarTablaPersonal()">
+                </div>
+                <table border="1" cellpadding="10" width="100%">
+                    <tr><th>Clave</th><th>Nombre</th><th>Rol</th><th>Correo</th><th>Acciones</th></tr>
+                    <tbody id="personal-tbody"><tr><td colspan="5">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+
+        <!-- ASISTENCIA POR CÓDIGO QR -->
+        <div id="asistencias" class="section">
+
+            <!-- MONITOR DE LA ESCUELA: Administrador (o quien tenga el permiso asistencia.monitor) -->
+            <div class="card" data-permiso="asistencia.monitor">
+                <div class="perm-hero">
+                    <div class="perm-hero-icono"><i class="fas fa-qrcode"></i></div>
+                    <div>
+                        <h3>Monitor de asistencia</h3>
+                        <p>Proyecta este código en el monitor de la escuela. Cambia solo cada vez que alguien registra su asistencia y se renueva a los 60 segundos si nadie lo usa.</p>
+                    </div>
+                </div>
+                <div class="monitor-botones">
+                    <button class="btn btn-primary" id="monitor-btn" onclick="monitorAlternar()">Iniciar monitor</button>
+                    <button class="btn btn-accent" id="monitor-full-btn" style="display:none;" onclick="monitorPantallaCompleta()"><i class="fas fa-expand"></i> Pantalla completa</button>
+                </div>
+                <div id="monitor-area" class="monitor-area" style="display:none;">
+                    <div id="monitor-qr" class="monitor-qr"></div>
+                    <div class="monitor-barra"><div id="monitor-barra-fill"></div></div>
+                    <p class="monitor-texto">Escanéalo con tu celular · cambia en <b id="monitor-restante">60</b> s</p>
+                    <div id="monitor-ultimo" class="monitor-ultimo"></div>
+                    <small id="monitor-estado"></small>
+                </div>
+            </div>
+
+            <!-- REGISTRO: SOLO Docente y Administrativo -->
+            <div class="card" data-roles="Docente,Administrativo">
+                <div class="perm-hero">
+                    <div class="perm-hero-icono"><i class="fas fa-qrcode"></i></div>
+                    <div>
+                        <h3>Registra tu asistencia</h3>
+                        <p>Escanea el código QR del monitor de la escuela con la cámara trasera de tu celular. Tu asistencia se registra al instante (el sistema decide si es tu entrada o tu salida).</p>
+                    </div>
+                </div>
+                <div class="aq-pasos">
+                    <div id="reg-inicio">
+                        <button class="btn btn-primary" style="width:100%;" onclick="registroIniciar()"><i class="fas fa-qrcode"></i> Escanear código QR del monitor</button>
+                        <small>Debes permitir el acceso a la cámara.</small>
+                    </div>
+                    <div id="reg-escaner" style="display:none;">
+                        <p>Apunta la cámara trasera al código QR del monitor.</p>
+                        <div id="qr-reader"></div>
+                        <button class="btn btn-secondary" style="width:100%;" onclick="registroCancelar()">Cancelar</button>
+                    </div>
+                    <div id="reg-enviando" style="display:none; text-align:center;">
+                        <p><i class="fas fa-spinner fa-spin"></i> Registrando tu asistencia...</p>
+                    </div>
+                    <div id="reg-resultado" style="display:none;"></div>
+                </div>
+            </div>
+
+            <!-- HISTORIAL: el personal ve lo suyo; quien tenga asistencia.ver ve todo -->
+            <div class="card" data-roles="Docente,Administrativo" data-permiso="asistencia.ver">
+                <h3>Historial de asistencias e inasistencias</h3>
+                <p class="required-note">Últimos 30 días. Las inasistencias se calculan solas: día con jornada programada en el que no se escaneó el código QR.</p>
+                <div style="overflow-x: auto;">
+                    <table border="1" cellpadding="10" width="100%">
+                        <tr><th>Fecha</th><th>Persona</th><th>Jornada</th><th>Entrada</th><th>Estatus</th><th>Salida</th></tr>
+                        <tbody id="aq-hist-tbody"><tr><td colspan="6">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- GESTIÓN DE JUSTIFICANTES -->
+        <div id="justificantes" class="section">
+
+            <div class="card" data-roles="Alumno">
+                <h3>Solicitar Justificante</h3>
+                <p class="required-note">Debe existir una inasistencia dentro de las últimas <span>72 horas</span> y adjuntar evidencia (PDF, JPG o PNG).</p>
+                <div class="grid">
+                    <div class="form-group"><label>Fecha Inicio</label><input type="date" id="just-inicio"></div>
+                    <div class="form-group"><label>Fecha Fin</label><input type="date" id="just-fin"></div>
+                    <div class="form-group"><label>Evidencia</label><input type="file" id="just-evidencia" accept=".pdf,.jpg,.jpeg,.png"></div>
+                    <div class="form-group" style="grid-column: 1 / -1;"><label>Motivo</label><textarea id="just-motivo" maxlength="250"></textarea></div>
+                </div>
+                <button class="btn btn-secondary" onclick="solicitarJustificante(this)">Enviar Solicitud</button>
+            </div>
+
+            <div class="card" data-permiso="justificantes.resolver">
+                <h3>Bandeja de Justificantes</h3>
+                <p class="required-note">Usa <b style="color:var(--success)">✓</b> para aprobar o <b style="color:var(--secondary)">✗</b> para rechazar. Puedes agregar un comentario opcional y corregir una resolución en cualquier momento.</p>
+                <div class="form-group" style="max-width: 260px;">
+                    <label>Filtrar por estatus</label>
+                    <select id="filtro-just-estatus" onchange="cargarBandejaJustificantes()">
+                        <option value="">Todos</option><option>Pendiente</option><option>Aprobado</option><option>Rechazado</option>
+                    </select>
+                </div>
+                <table border="1" cellpadding="10" width="100%">
+                    <tr><th>Folio</th><th>Alumno</th><th>Fechas</th><th>Motivo</th><th>Estatus</th><th>Comentario</th><th>Acciones</th></tr>
+                    <tbody id="justificantes-bandeja-tbody"><tr><td colspan="6">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+
+            <div class="card" data-roles="Docente,Padre_Tutor,Alumno">
+                <h3>Historial de Justificantes</h3>
+                <table border="1" cellpadding="10" width="100%">
+                    <tr><th>Folio</th><th>Alumno</th><th>Estatus</th><th>Fecha Inicio</th><th>Comentario</th></tr>
+                    <tbody id="justificantes-historial-tbody"><tr><td colspan="5">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+
+        <!-- SUSPENSIÓN DE CLASES -->
+        <div id="suspensiones" class="section">
+            <div class="card">
+                <div class="perm-hero">
+                    <div class="perm-hero-icono"><i class="fas fa-calendar-times"></i></div>
+                    <div>
+                        <h3>Días sin clases</h3>
+                        <p>Registra las suspensiones por motivos académicos, fallas en instalaciones, clima, salud o conflictos. En esos días no se registra asistencia por código QR y no se cuentan faltas de docentes.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" data-permiso="suspensiones.gestionar">
+                <h3>Registrar suspensión</h3>
+                <div class="grid">
+                    <div class="form-group">
+                        <label>Categoría</label>
+                        <select id="susp-categoria" onchange="suspCambiarCategoria()"><option value="">-- Seleccione --</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Motivo</label>
+                        <select id="susp-motivo" onchange="suspMostrarDescripcion()"><option value="">-- Seleccione --</option></select>
+                    </div>
+                </div>
+                <div id="susp-descripcion" class="susp-descripcion"></div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label>Fecha de inicio</label>
+                        <input type="date" id="susp-inicio">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha final <small>(igual a la inicial si es un solo día)</small></label>
+                        <input type="date" id="susp-fin">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Observaciones (opcional)</label>
+                    <input type="text" id="susp-observaciones" maxlength="255" placeholder="Ej. Oficio de la supervisión, zona afectada, etc.">
+                </div>
+                <button class="btn btn-primary" onclick="suspRegistrar(this)">Registrar suspensión</button>
+            </div>
+
+            <div class="card">
+                <h3>Calendario de suspensiones</h3>
+                <div class="form-group" style="max-width: 280px;">
+                    <label>Mostrar</label>
+                    <select id="susp-filtro" onchange="suspCargar()">
+                        <option value="todas">Todas</option>
+                        <option value="activas" selected>Vigentes y próximas</option>
+                        <option value="concluidas">Concluidas</option>
+                    </select>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table border="1" cellpadding="10" width="100%">
+                        <tr><th>Fechas</th><th>Categoría</th><th>Motivo</th><th>Estado</th><th>Registró</th><th>Acciones</th></tr>
+                        <tbody id="susp-tbody"><tr><td colspan="6">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERMISOS Y ACCESOS -->
+        <div id="permisos" class="section">
+            <div class="card">
+                <div class="perm-hero">
+                    <div class="perm-hero-icono"><i class="fas fa-user-shield"></i></div>
+                    <div>
+                        <h3>Define quién puede hacer qué</h3>
+                        <p>Marca los permisos de cada <b>rol</b> o ajusta a una <b>persona</b> en particular. Los cambios se aplican la próxima vez que esa persona abra o recargue el sistema.</p>
+                    </div>
+                </div>
+
+                <div class="catalogo-tabs">
+                    <button class="tab-btn active" id="perm-tab-rol" onclick="permCambiarModo('rol')">Por rol</button>
+                    <button class="tab-btn" id="perm-tab-usuario" onclick="permCambiarModo('usuario')">Por persona</button>
+                </div>
+
+                <div id="perm-modo-rol" class="form-group" style="max-width: 360px;">
+                    <label>Rol</label>
+                    <select id="perm-rol" onchange="permCargarRol()"></select>
+                </div>
+
+                <div id="perm-modo-usuario" style="display:none;">
+                    <div class="grid">
+                        <div class="form-group">
+                            <label>Buscar (nombre o usuario)</label>
+                            <input type="text" id="perm-buscar" placeholder="Escribe para buscar..." oninput="permBuscarUsuarios(true)">
+                        </div>
+                        <div class="form-group">
+                            <label>Persona <small>(★ = tiene ajustes propios)</small></label>
+                            <select id="perm-usuario" onchange="permCargarUsuario()"></select>
+                        </div>
+                    </div>
+                </div>
+
+                <p class="perm-nota" id="perm-nota"></p>
+                <div id="perm-matriz"></div>
+                <div class="perm-acciones" id="perm-acciones" style="display:none;">
+                    <button class="btn btn-primary" onclick="permGuardar(this)">Guardar permisos</button>
+                    <button class="btn btn-accent" type="button" onclick="permMarcarTodo(true)">Marcar todo</button>
+                    <button class="btn btn-accent" type="button" onclick="permMarcarTodo(false)">Quitar todo</button>
+                    <button class="btn btn-secondary" id="perm-restablecer" onclick="permRestablecer(this)">Volver a los del rol</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- REPORTES -->
+        <div id="reportes" class="section">
+            <div class="card">
+                <h3>Generar Reporte</h3>
+                <p class="required-note">El reporte se genera en PDF y se muestra antes de decidir si lo descargas.</p>
+                <div class="grid">
+                    <div class="form-group"><label>Tipo de Reporte</label>
+                        <select id="reporte-tipo"><option value="">-- Seleccione --</option></select>
+                    </div>
+                    <div class="form-group"><label>Fecha Inicio</label><input type="date" id="fechaInicio"></div>
+                    <div class="form-group"><label>Fecha Fin</label><input type="date" id="fechaFin"></div>
+                </div>
+                <button class="btn btn-primary" onclick="generarReporte(this)"><i class="fas fa-file-pdf"></i> Generar Reporte</button>
+            </div>
+        </div>
+
+
+        <!-- PERFIL DE USUARIO -->
+        <div id="perfil" class="section">
+            <div class="card">
+                <h3>Mis Datos</h3>
+                <div class="grid">
+                    <div class="form-group"><label>Nombre</label><input type="text" id="perfil-nombre" readonly></div>
+                    <div class="form-group"><label>Identificador de acceso</label><input type="text" id="perfil-identificador" readonly></div>
+                    <div class="form-group"><label>Rol</label><input type="text" id="perfil-rol" readonly></div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Cambiar Contraseña</h3>
+                <p class="required-note">Mínimo <span>8 caracteres</span>.</p>
+                <div class="grid">
+                    <div class="form-group"><label>Contraseña Actual</label><input type="password" id="perfil-pass-actual" maxlength="20"></div>
+                    <div class="form-group"><label>Nueva Contraseña</label><input type="password" id="perfil-pass-nueva" maxlength="20"></div>
+                    <div class="form-group"><label>Confirmar Nueva Contraseña</label><input type="password" id="perfil-pass-confirmar" maxlength="20"></div>
+                </div>
+                <button class="btn btn-success" onclick="cambiarPassword(this)">Cambiar Contraseña</button>
+            </div>
+        </div>
+
+
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/navigation.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/catalogos.js"></script>
+    <script src="js/forms.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="js/asistencia_qr.js"></script>
+    <script src="js/permisos.js"></script>
+    <script src="js/suspensiones.js"></script>
+</body>
+</html>
